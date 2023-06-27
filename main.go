@@ -3,14 +3,12 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/urfave/cli/v2"
 	"go.bug.st/serial"
 	"io"
-	"log"
+	"lora-project/protocol/messages"
 	"math/rand"
 	"os"
-	"os/signal"
-	"syscall"
+	"strconv"
 	"time"
 )
 
@@ -44,40 +42,55 @@ func write(port serial.Port) {
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
-	app := &cli.App{
-		Name:  "boom",
-		Usage: "make an explosive entrance",
-		Action: func(*cli.Context) error {
-			fmt.Println("boom! I say!")
-			return nil
-		},
-	}
+	/*	rand.Seed(time.Now().UnixNano())
+		app := &cli.App{
+			Name:  "boom",
+			Usage: "make an explosive entrance",
+			Action: func(*cli.Context) error {
+				fmt.Println("boom! I say!")
+				return nil
+			},
+		}
 
-	if err := app.Run(os.Args); err != nil {
-		log.Fatal(err)
-	}
-	mode := &serial.Mode{
-		BaudRate: 115200,
-	}
-	port, err := serial.Open("/home/Hannes/dev/ttyS21", mode)
-	if err != nil {
-		log.Fatal(err)
-	}
+		if err := app.Run(os.Args); err != nil {
+			log.Fatal(err)
+		}
+		mode := &serial.Mode{
+			BaudRate: 115200,
+		}
+		port, err := serial.Open("/home/Hannes/dev/ttyS21", mode)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sig
-		fmt.Println("Interrupt signal received, closing serial port...")
-		port.Close()
-		os.Exit(0)
-	}()
-	write(port)
-	scanner := bufio.NewScanner(port)
-	for scanner.Scan() {
-		line := scanner.Text()
-		fmt.Println("received: " + line)
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			<-sig
+			fmt.Println("Interrupt signal received, closing serial port...")
+			port.Close()
+			os.Exit(0)
+		}()
 		write(port)
+		scanner := bufio.NewScanner(port)
+		for scanner.Scan() {
+			line := scanner.Text()
+			fmt.Println("received: " + line)
+			write(port)
+		}*/
+
+	data := []byte{'4', '4', '7', '6', '1', '0', '0', '0', '0', '0', '1'}
+	header, err := messages.UnmarshalHeader(data)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if concreteStruct, ok := header.(*messages.DataAck); ok {
+		fmt.Println("T:", string(concreteStruct.T))
+		fmt.Println("DestinationAddress:", string(concreteStruct.DestinationAddress[:]))
+		fmt.Println("OriginatorAddress:", string(concreteStruct.OriginatorAddress[:]))
+		val, _ := strconv.ParseInt(string(concreteStruct.DataSequenceNumber[:]), 16, 8)
+		fmt.Printf("DataSequenceNumber: %v", val)
+	} else {
+		fmt.Println("Type assertion failed")
 	}
 }
