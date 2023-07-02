@@ -1,32 +1,53 @@
 package messages
 
 import (
-	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
+	"strconv"
 )
 
 type RREP struct {
-	T                      byte
-	HopCount               [2]byte
-	DestinationAddress     [4]byte
-	DestinationSequenceNum [4]byte
-	OriginatorAddress      [4]byte
+	HopCount               uint8
+	DestinationAddress     Address
+	DestinationSequenceNum int16
+	OriginatorAddress      Address
 }
 
-func (h *RREP) HeaderSize() int {
-	return 15
+var _ Message = &RREP{}
+
+func (r RREP) Type() MessageType {
+	return Type_RREP
 }
 
-func (h *RREP) unmarshal(data []byte) error {
-	if len(data) < h.HeaderSize() {
-		// Handle error: insufficient data
-		return fmt.Errorf("cannot unmarshal data: expected %d bytes but got %d", h.HeaderSize(), len(data))
+func (r RREP) HeaderSize() int {
+	return 7
+}
+
+func (r *RREP) Unmarshal(data []byte) error {
+	if len(data) < r.HeaderSize() {
+		return fmt.Errorf("wrong data size")
 	}
 
-	buf := bytes.NewBuffer(data)
+	u64, err := strconv.ParseUint(string(data[:2]), 16, 8)
+	if err != nil {
+		return err
+	}
 
-	err := binary.Read(buf, binary.BigEndian, h)
+	r.HopCount = uint8(u64)
+
+	err = r.DestinationAddress.UnmarshalText(data[2:6])
+	if err != nil {
+		return err
+	}
+
+	bytes, err := hex.DecodeString(string(data[6:10]))
+	if err != nil {
+		return err
+	}
+	r.DestinationSequenceNum = int16(binary.BigEndian.Uint16(bytes))
+
+	err = r.OriginatorAddress.UnmarshalText(data[10:14])
 	if err != nil {
 		return err
 	}
@@ -34,13 +55,20 @@ func (h *RREP) unmarshal(data []byte) error {
 	return nil
 }
 
-func (h *RREP) Marshal() ([]byte, error) {
-	buf := bytes.NewBuffer(make([]byte, 0, h.HeaderSize()))
-
-	err := binary.Write(buf, binary.BigEndian, h)
+func (r RREP) Marshal() ([]byte, error) {
+	buf := make([]byte, 13)
+	buf = append(buf, byte(r.Type()))
+	buf = append(buf, []byte(fmt.Sprintf("%02X", r.HopCount))...)
+	addressBytes, err := r.DestinationAddress.MarshalText()
 	if err != nil {
 		return nil, err
 	}
-
-	return buf.Bytes(), nil
+	buf = append(buf, addressBytes...)
+	buf = append(buf, []byte(fmt.Sprintf("%04X", r.DestinationSequenceNum))...)
+	addressBytes, err = r.OriginatorAddress.MarshalText()
+	if err != nil {
+		return nil, err
+	}
+	buf = append(buf, addressBytes...)
+	return buf, nil
 }

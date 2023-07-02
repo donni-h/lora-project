@@ -8,7 +8,6 @@ import (
 	"lora-project/protocol/messages"
 	"math/rand"
 	"os"
-	"strconv"
 	"time"
 )
 
@@ -79,17 +78,16 @@ func main() {
 			write(port)
 		}*/
 
-	data := []byte{'4', '4', '7', '6', '1', '0', '0', '0', '0', '0', '1'}
-	header, err := messages.UnmarshalHeader(data)
+	data := []byte{'1', '0', '2', '0', '0', '0', '0', '1', '1', '1', '1', '4', '7', '6', '1'}
+	header, err := messages.Unmarshal(data)
 	if err != nil {
 		fmt.Println(err)
 	}
-	if concreteStruct, ok := header.(*messages.DataAck); ok {
-		fmt.Println("T:", string(concreteStruct.T))
-		fmt.Println("DestinationAddress:", string(concreteStruct.DestinationAddress[:]))
-		fmt.Println("OriginatorAddress:", string(concreteStruct.OriginatorAddress[:]))
-		val, _ := strconv.ParseInt(string(concreteStruct.DataSequenceNumber[:]), 16, 8)
-		fmt.Printf("DataSequenceNumber: %v", val)
+	if concreteStruct, ok := header.(*messages.RREP); ok {
+		fmt.Println("DestinationAddress:", concreteStruct.DestinationAddress.String())
+		fmt.Println("OriginatorAddress:", concreteStruct.OriginatorAddress.String())
+		val := int16(concreteStruct.DestinationSequenceNum)
+		fmt.Printf("DataSequenceNumber: %v\n", val)
 	} else {
 		fmt.Println("Type assertion failed")
 	}
