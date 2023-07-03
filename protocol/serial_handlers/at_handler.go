@@ -45,6 +45,58 @@ func (a *ATHandler) AddCommand(cmd Command) {
 	a.CommandQueue <- cmd
 }
 
+// SendMessage sends a messages.Message via the ATHandler.
+func (a *ATHandler) SendMessage(msg messages.Message) {
+	data, err := msg.Marshal()
+	if err != nil {
+		a.ErrorChan <- err
+		return
+	}
+	cmd := Command{
+		Cmd:  "AT+SEND",
+		Args: []string{strconv.Itoa(len(data))},
+		Callback: func(response string, err error) {
+			if err != nil {
+				a.ErrorChan <- err
+				return
+			}
+			_, err = a.device.Write(data)
+			if err != nil {
+				a.ErrorChan <- err
+			}
+		},
+	}
+	a.AddCommand(cmd)
+}
+
+// SetTargetAddress sets the destination address for the ATHandler.
+func (a *ATHandler) SetTargetAddress(addr messages.Address) {
+	cmd := Command{
+		Cmd:  "AT+DEST",
+		Args: []string{addr.String()},
+		Callback: func(response string, err error) {
+			if err != nil {
+				a.ErrorChan <- err
+			}
+		},
+	}
+	a.AddCommand(cmd)
+}
+
+// Configure configures the LoRa transceiver using the AT+CFG command.
+func (a *ATHandler) Configure(args []string) {
+	cmd := Command{
+		Cmd:  "AT+CFG",
+		Args: args,
+		Callback: func(response string, err error) {
+			if err != nil {
+				a.ErrorChan <- err
+			}
+		},
+	}
+	a.AddCommand(cmd)
+}
+
 func (a *ATHandler) Run() {
 	go a.processResponses()
 	a.processCommands()
@@ -92,57 +144,104 @@ func (a *ATHandler) processResponses() {
 		response := strings.TrimSuffix(scanner.Text(), "\r\n")
 
 		if strings.HasPrefix(response, "AT+SENDED") {
-			a.commandMutex.Unlock()
-			continue
+			a.handleCommandSent()
+		} else if strings.HasPrefix(response, "LR,") {
+			a.handleReceivedData(response)
+		} else {
+			a.handleCommandResponse(response)
 		}
+	}
+}
 
-		if strings.HasPrefix(response, "LR,") {
-			dataParts := strings.SplitN(response, ",", 4)
-			if len(dataParts) != 4 {
-				a.ErrorChan <- errors.New("Received malformed data: " + response)
-				continue
-			}
-			sourceAddress := messages.Address{}
-			err := sourceAddress.UnmarshalText([]byte(dataParts[1]))
-			if err != nil {
-				a.ErrorChan <- errors.New("Unable to parse source address: " + dataParts[1])
-				continue
-			}
-			dataLength, err := strconv.ParseInt(dataParts[2], 16, 64)
-			if err != nil {
-				a.ErrorChan <- errors.New("Unable to parse data length: " + dataParts[2])
-				continue
-			}
-			payload := dataParts[3]
-			if int64(len(payload)) != dataLength {
-				a.ErrorChan <- errors.New(fmt.Sprintf("Data length mismatch: expected %d, got %d", dataLength, len(payload)))
-				continue
-			}
-			message, err := messages.Unmarshal([]byte(payload))
+func (a *ATHandler) handleReceivedData(response string) {
+	parts := strings.Split(response, ",")
+	if len(parts) != 4 {
+		a.ErrorChan <- errors.New("malformed received data")
+		return
+	}
+
+	srcAddress := messages.Address{}
+	err := srcAddress.UnmarshalText([]byte(parts[1]))
+	if err != nil {
+		a.ErrorChan <- err
+		return
+	}
+
+	dataLen, err := strconv.ParseInt(parts[2], 16, 32)
+	if err != nil {
+		a.ErrorChan <- err
+		return
+	}
+
+	data := parts[3]
+	if len(data) != int(dataLen) {
+		a.ErrorChan <- errors.New("received data length does not match expected length")
+		return
+	}
+
+	msg, err := messages.Unmarshal([]byte(data))
+	if err != nil {
+		a.ErrorChan <- err
+		return
+	}
+	a.MessageChan <- msg
+}
+
+func (a *ATHandler) handleCommandSent() {
+	a.commandMutex.Lock()
+	defer a.commandMutex.Unlock()
+
+	if len(a.commandsInFlight) == 0 {
+		a.ErrorChan <- errors.New("unexpected 'AT+SENDED'")
+		return
+	}
+	cmd := a.commandsInFlight[0]
+	a.commandsInFlight = a.commandsInFlight[1:]
+	cmd.Callback("AT+SENDED", nil)
+}
+
+func (a *ATHandler) SendData(msg messages.Message) error {
+	data, err := msg.Marshal()
+	if err != nil {
+		return err
+	}
+
+	dataLen := len(data)
+	if dataLen > 250 {
+		return fmt.Errorf("data length exceeds the maximum limit of 250 bytes")
+	}
+
+	a.AddCommand(Command{
+		Cmd:  "AT+SEND",
+		Args: []string{strconv.Itoa(dataLen)},
+		Callback: func(response string, err error) {
 			if err != nil {
 				a.ErrorChan <- err
-				continue
+				return
 			}
-			// handle the received data
-			fmt.Println("Received data from", sourceAddress.String(), ": message type ", message.Type())
-			a.MessageChan <- message
-			continue
-		}
+			if response != "AT,OK" {
+				a.ErrorChan <- errors.New("failed to send data: " + response)
+				return
+			}
+			_, err = a.device.Write(data)
+			if err != nil {
+				a.ErrorChan <- err
+				return
+			}
+		},
+	})
+	return nil
+}
 
-		a.commandMutex.Lock()
-		if len(a.commandsInFlight) == 0 {
-			a.commandMutex.Unlock()
-			continue
-		}
-		cmd := a.commandsInFlight[0]
-		a.commandsInFlight = a.commandsInFlight[1:]
+func (a *ATHandler) handleCommandResponse(response string) {
+	a.commandMutex.Lock()
+	defer a.commandMutex.Unlock()
 
-		if strings.HasPrefix(response, "AT+ERR") {
-			cmd.Callback("", errors.New(response))
-		} else if strings.HasPrefix(response, "AT+OK") {
-			cmd.Callback(response, nil)
-		}
-		a.commandMutex.Unlock()
-		a.responseReceived <- struct{}{}
+	if len(a.commandsInFlight) == 0 {
+		a.ErrorChan <- errors.New("unexpected response: " + response)
+		return
 	}
+	cmd := a.commandsInFlight[0]
+	a.commandsInFlight = a.commandsInFlight[1:]
+	cmd.Callback(response, nil)
 }

@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"go.bug.st/serial"
 	"io"
+	"log"
 	"lora-project/protocol/messages"
+	"lora-project/protocol/serial_handlers"
 	"math/rand"
 	"os"
 	"time"
@@ -78,16 +80,22 @@ func main() {
 			write(port)
 		}*/
 
-	data := []byte{'3', '0', '2', '1', '1', '1', '1', '0', '0', '0', '0', '4', '7', '6', '1', '3', '3', '3', '3', '2', '2', '2', '2'}
-	header, err := messages.Unmarshal(data)
+	data := []byte{'0', '0', '2', '1', '1', '1', '1', '0', '0', '0', '0', '4', '7', '6', '1', '3', '3', '3', '3', '2', '2', '2', '2', '0'}
+	message, err := messages.Unmarshal(data)
 	if err != nil {
 		fmt.Println(err)
 	}
-	if concreteStruct, ok := header.(*messages.Data); ok {
-		fmt.Printf("%+v\n", concreteStruct)
-		byteSlice, _ := concreteStruct.Marshal()
-		fmt.Println(string(byteSlice))
-	} else {
-		fmt.Println("Type assertion failed")
+
+	fmt.Printf("%+v\n", message)
+	byteSlice, _ := message.Marshal()
+	fmt.Println(string(byteSlice))
+	mode := &serial.Mode{
+		BaudRate: 115200,
 	}
+	port, err := serial.Open("/home/Hannes/dev/ttyS21", mode)
+	if err != nil {
+		log.Fatal(err)
+	}
+	handler := serial_handlers.NewATHandler(port)
+	handler.Run()
 }
