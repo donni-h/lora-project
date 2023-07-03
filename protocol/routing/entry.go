@@ -1,11 +1,15 @@
 package routing
 
-import "time"
+import (
+	"lora-project/protocol/messages"
+	"time"
+)
 
 type RouteEntry struct {
-	DestinationAddress     [4]byte
-	NextHop                [4]byte
-	HopCount               [2]byte
-	DestinationSequenceNum [4]byte
+	DestinationAddress     messages.Address
+	NextHop                messages.Address
+	HopCount               uint8
+	Precursors             []messages.Address
+	DestinationSequenceNum int16
 	Arrival                time.Time
 }

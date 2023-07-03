@@ -78,16 +78,15 @@ func main() {
 			write(port)
 		}*/
 
-	data := []byte{'1', '0', '2', '0', '0', '0', '0', '1', '1', '1', '1', '4', '7', '6', '1'}
+	data := []byte{'3', '0', '2', '1', '1', '1', '1', '0', '0', '0', '0', '4', '7', '6', '1', '3', '3', '3', '3', '2', '2', '2', '2'}
 	header, err := messages.Unmarshal(data)
 	if err != nil {
 		fmt.Println(err)
 	}
-	if concreteStruct, ok := header.(*messages.RREP); ok {
-		fmt.Println("DestinationAddress:", concreteStruct.DestinationAddress.String())
-		fmt.Println("OriginatorAddress:", concreteStruct.OriginatorAddress.String())
-		val := int16(concreteStruct.DestinationSequenceNum)
-		fmt.Printf("DataSequenceNumber: %v\n", val)
+	if concreteStruct, ok := header.(*messages.Data); ok {
+		fmt.Printf("%+v\n", concreteStruct)
+		byteSlice, _ := concreteStruct.Marshal()
+		fmt.Println(string(byteSlice))
 	} else {
 		fmt.Println("Type assertion failed")
 	}

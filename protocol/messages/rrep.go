@@ -25,7 +25,7 @@ func (r RREP) HeaderSize() int {
 }
 
 func (r *RREP) Unmarshal(data []byte) error {
-	if len(data) < r.HeaderSize() {
+	if len(data) < 14 {
 		return fmt.Errorf("wrong data size")
 	}
 
@@ -56,7 +56,7 @@ func (r *RREP) Unmarshal(data []byte) error {
 }
 
 func (r RREP) Marshal() ([]byte, error) {
-	buf := make([]byte, 13)
+	buf := []byte{}
 	buf = append(buf, byte(r.Type()))
 	buf = append(buf, []byte(fmt.Sprintf("%02X", r.HopCount))...)
 	addressBytes, err := r.DestinationAddress.MarshalText()

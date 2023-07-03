@@ -11,28 +11,27 @@ type RRER struct {
 	UnreachDestinationSequence int16
 }
 
-func (h *RRER) Type() MessageType {
-	//TODO implement me
-	panic("implement me")
+func (r *RRER) Type() MessageType {
+	return Type_RRER
 }
 
-func (h *RRER) HeaderSize() int {
-	return 10
+func (r *RRER) HeaderSize() int {
+	return 5
 }
 
-func (h *RRER) Unmarshal(data []byte) error {
-	if len(data) < h.HeaderSize() {
+func (r *RRER) Unmarshal(data []byte) error {
+	if len(data) < 10 {
 		// Handle error: insufficient data
-		return fmt.Errorf("cannot Unmarshal data: expected at least %d bytes but got %d", h.HeaderSize(), len(data))
+		return fmt.Errorf("cannot Unmarshal data: expected at least %d bytes but got %d", r.HeaderSize(), len(data))
 	}
 
 	u64, err := strconv.ParseUint(string(data[:2]), 16, 8)
 	if err != nil {
 		return fmt.Errorf("invalid Dest Count")
 	}
-	h.DestCount = uint8(u64)
+	r.DestCount = uint8(u64)
 
-	err = h.UnreachDestinationAddress.UnmarshalText(data[2:6])
+	err = r.UnreachDestinationAddress.UnmarshalText(data[2:6])
 	if err != nil {
 		return fmt.Errorf("invalid Unreach Destination Address: %w", err)
 	}
@@ -41,20 +40,19 @@ func (h *RRER) Unmarshal(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("invalid Unreach Dest Sequence Number")
 	}
-	h.UnreachDestinationSequence = int16(u64)
+	r.UnreachDestinationSequence = int16(u64)
 
 	return nil
 }
 
-func (h *RRER) Marshal() ([]byte, error) {
-	buf := make([]byte, 0, h.HeaderSize())
-
-	buf = append(buf, []byte(fmt.Sprintf("%02X", h.DestCount))...)
-	addressBytes, err := h.UnreachDestinationAddress.MarshalText()
+func (r *RRER) Marshal() ([]byte, error) {
+	buf := []byte{}
+	buf = append(buf, byte(r.Type()))
+	buf = append(buf, []byte(fmt.Sprintf("%02X", r.DestCount))...)
+	addressBytes, err := r.UnreachDestinationAddress.MarshalText()
 	if err != nil {
 		return nil, err
 	}
 	buf = append(buf, addressBytes...)
-	buf = append(buf, []byte(fmt.Sprintf("%04X", h.UnreachDestinationSequence))...)
 	return buf, nil
 }

@@ -1,8 +1,6 @@
 package messages
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
 	"strconv"
 )
@@ -18,8 +16,7 @@ type RREQ struct {
 }
 
 func (r *RREQ) Type() MessageType {
-	//TODO implement me
-	panic("implement me")
+	return Type_RREQ
 }
 
 func (r *RREQ) HeaderSize() int {
@@ -27,8 +24,8 @@ func (r *RREQ) HeaderSize() int {
 }
 
 func (r *RREQ) Unmarshal(data []byte) error {
-	if len(data) < r.HeaderSize() {
-		return fmt.Errorf("cannot Unmarshal data: expected %d bytes but got %d", r.HeaderSize(), len(data))
+	if len(data) < 23 {
+		return fmt.Errorf("cannot Unmarshal data: expected %d bytes but got %d", 23, len(data))
 	}
 
 	r.UFlag = data[0] == 'Y'
@@ -72,31 +69,26 @@ func (r *RREQ) Unmarshal(data []byte) error {
 }
 
 func (r *RREQ) Marshal() ([]byte, error) {
-	buf := new(bytes.Buffer)
+	buf := []byte{}
+	buf = append(buf, byte(r.Type()))
 	uFlagByte := byte('N')
 	if r.UFlag {
 		uFlagByte = 'Y'
 	}
-	if err := buf.WriteByte(uFlagByte); err != nil {
+	buf = append(buf, uFlagByte)
+	buf = append(buf, []byte(fmt.Sprintf("%02X", r.HopCount))...)
+	buf = append(buf, []byte(fmt.Sprintf("%04X", r.RREQID))...)
+	addressBytes, err := r.DestinationAddress.MarshalText()
+	if err != nil {
 		return nil, err
 	}
-	if err := binary.Write(buf, binary.BigEndian, r.HopCount); err != nil {
+	buf = append(buf, addressBytes...)
+	buf = append(buf, []byte(fmt.Sprintf("%04X", r.DestinationSequenceNum))...)
+	addressBytes, err = r.OriginatorAddress.MarshalText()
+	if err != nil {
 		return nil, err
 	}
-	if err := binary.Write(buf, binary.BigEndian, r.RREQID); err != nil {
-		return nil, err
-	}
-	if _, err := buf.Write(r.DestinationAddress[:]); err != nil {
-		return nil, err
-	}
-	if err := binary.Write(buf, binary.BigEndian, r.DestinationSequenceNum); err != nil {
-		return nil, err
-	}
-	if _, err := buf.Write(r.OriginatorAddress[:]); err != nil {
-		return nil, err
-	}
-	if err := binary.Write(buf, binary.BigEndian, r.OriginatorSequenceNum); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	buf = append(buf, addressBytes...)
+	buf = append(buf, []byte(fmt.Sprintf("%04X", r.OriginatorSequenceNum))...)
+	return buf, nil
 }
