@@ -7,7 +7,7 @@ import (
 	"io"
 	"log"
 	"lora-project/protocol/messages"
-	"lora-project/protocol/serial_handlers"
+	"lora-project/serial_handlers"
 	"math/rand"
 	"os"
 	"time"

@@ -32,7 +32,7 @@ type ATHandler struct {
 func NewATHandler(device io.ReadWriter) *ATHandler {
 	handler := &ATHandler{
 		device:           device,
-		CommandQueue:     make(chan Command),
+		CommandQueue:     make(chan Command, 10),
 		ErrorChan:        make(chan error),
 		Done:             make(chan bool),
 		responseReceived: make(chan struct{}),
