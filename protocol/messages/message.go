@@ -12,10 +12,10 @@ type Message interface {
 type MessageType uint8
 
 const (
-	Type_RREQ MessageType = iota + '0'
-	Type_RREP
-	Type_RRER
-	Type_Data
+	TypeRREQ MessageType = iota + '0'
+	TypeRREP
+	TypeRRER
+	TypeData
 )
 
 func Unmarshal(data []byte) (Message, error) {
@@ -24,13 +24,13 @@ func Unmarshal(data []byte) (Message, error) {
 		return nil, fmt.Errorf("data can't be null")
 	}
 	switch MessageType(data[0]) {
-	case Type_RREQ:
+	case TypeRREQ:
 		message = &RREQ{}
-	case Type_RREP:
+	case TypeRREP:
 		message = &RREP{}
-	case Type_RRER:
+	case TypeRRER:
 		message = &RRER{}
-	case Type_Data:
+	case TypeData:
 		message = &Data{}
 	default:
 		return nil, fmt.Errorf("unknown message type: %s", string(data[0]))
@@ -43,4 +43,15 @@ func Unmarshal(data []byte) (Message, error) {
 
 	return message, nil
 
+}
+
+/*
+CompareSeqnums compares two sequence numbers.
+It takes current and incoming sequence numbers as arguments, both of type int16.
+The function returns true if the incoming sequence number is fresher (greater)
+than or equal to the current sequence number, accounting for possible sequence number rollover.
+Otherwise, it returns false.
+*/
+func CompareSeqnums(current int16, incoming int16) bool {
+	return incoming-current >= 0
 }

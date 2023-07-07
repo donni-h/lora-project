@@ -16,7 +16,7 @@ type RREQ struct {
 }
 
 func (r *RREQ) Type() MessageType {
-	return Type_RREQ
+	return TypeRREQ
 }
 
 func (r *RREQ) HeaderSize() int {

@@ -12,7 +12,7 @@ type RRER struct {
 }
 
 func (r *RRER) Type() MessageType {
-	return Type_RRER
+	return TypeRRER
 }
 
 func (r *RRER) HeaderSize() int {

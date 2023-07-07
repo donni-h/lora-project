@@ -13,7 +13,7 @@ type Data struct {
 }
 
 func (r *Data) Type() MessageType {
-	return Type_Data
+	return TypeData
 }
 
 func (r *Data) HeaderSize() int {
@@ -58,6 +58,7 @@ func (r *Data) Marshal() ([]byte, error) {
 		return nil, err
 	}
 	buf = append(buf, addressBytes...)
+	buf = append(buf, []byte(fmt.Sprintf("%04X", r.DataSequenceNumber))...)
 	buf = append(buf, r.Payload...)
 
 	return buf, nil

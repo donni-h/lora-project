@@ -13,11 +13,11 @@ func NewTable() Table {
 
 func (rt Table) AddOrUpdateEntry(address messages.Address, nextHop messages.Address, hopCount uint8, precursors []messages.Address, seqNum int16) {
 	rt[address] = &RouteEntry{
-		NextHop:                nextHop,
-		HopCount:               hopCount,
-		Precursors:             precursors,
-		DestinationSequenceNum: seqNum,
-		Arrival:                time.Now(),
+		NextHop:        nextHop,
+		HopCount:       hopCount,
+		Precursors:     precursors,
+		SequenceNumber: seqNum,
+		Arrival:        time.Now(),
 	}
 }
 

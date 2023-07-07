@@ -17,7 +17,7 @@ type RREP struct {
 var _ Message = &RREP{}
 
 func (r RREP) Type() MessageType {
-	return Type_RREP
+	return TypeRREP
 }
 
 func (r RREP) HeaderSize() int {

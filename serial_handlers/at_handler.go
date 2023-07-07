@@ -18,6 +18,11 @@ type Command struct {
 	Callback func(response string, err error)
 }
 
+type MessageEvent struct {
+	Message   messages.Message
+	Precursor messages.Address
+}
+
 type ATHandler struct {
 	device           io.ReadWriter
 	CommandQueue     chan Command
@@ -26,7 +31,7 @@ type ATHandler struct {
 	responseReceived chan struct{}
 	commandMutex     sync.Mutex
 	commandsInFlight []Command
-	MessageChan      chan messages.Message
+	MessageChan      chan MessageEvent
 }
 
 func NewATHandler(device io.ReadWriter) *ATHandler {
@@ -36,8 +41,9 @@ func NewATHandler(device io.ReadWriter) *ATHandler {
 		ErrorChan:        make(chan error),
 		Done:             make(chan bool),
 		responseReceived: make(chan struct{}),
-		MessageChan:      make(chan messages.Message),
+		MessageChan:      make(chan MessageEvent),
 	}
+	go handler.Run()
 	return handler
 }
 
@@ -184,7 +190,11 @@ func (a *ATHandler) handleReceivedData(response string) {
 		a.ErrorChan <- err
 		return
 	}
-	a.MessageChan <- msg
+	event := MessageEvent{
+		Message:   msg,
+		Precursor: srcAddress,
+	}
+	a.MessageChan <- event
 }
 
 func (a *ATHandler) handleCommandSent() {
