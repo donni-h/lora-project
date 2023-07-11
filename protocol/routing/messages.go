@@ -33,8 +33,33 @@ func (a *AODV) processMessage(event serial_handlers.MessageEvent) {
 }
 
 func (a *AODV) handleRREQ(rreq *messages.RREQ, precursor messages.Address) {
-	fmt.Println("Received RREQ:", rreq)
-	fmt.Println("Precursor:", precursor.String())
+	rt := a.routingTable
+
+	existingEntry, exists := rt.GetEntry(rreq.OriginatorAddress)
+
+	if !exists || messages.CompareSeqnums(existingEntry.SequenceNumber, rreq.OriginatorSequenceNum) {
+		rt.AddOrUpdateEntry(
+			rreq.OriginatorAddress,
+			precursor,
+			rreq.HopCount+1,
+			[]messages.Address{},
+			rreq.OriginatorSequenceNum,
+		)
+	}
+
+	if rreq.DestinationAddress == a.currentAddress {
+		a.generateRREP(rreq.OriginatorAddress, rreq.DestinationAddress)
+		return
+	}
+
+	_, exists = rt.GetEntry(rreq.DestinationAddress)
+
+	if exists {
+		a.generateRREP(rreq.OriginatorAddress, rreq.DestinationAddress)
+	}
+
+	rreq.HopCount += 1
+	a.sendToNextHop(rreq, a.broadcastAddress)
 }
 
 func (a *AODV) handleRREP(rrep *messages.RREP, precursor messages.Address) {
@@ -90,4 +115,29 @@ func (a *AODV) handleData(data *messages.Data, precursor messages.Address) {
 func (a *AODV) sendToNextHop(msg messages.Message, nextHop messages.Address) {
 	a.handler.SetTargetAddress(nextHop)
 	a.handler.SendMessage(msg)
+}
+
+func (a *AODV) generateRREP(originator messages.Address, destination messages.Address) {
+	rt := a.routingTable
+	destEntry, exists := rt.GetEntry(destination)
+
+	if !exists {
+		log.Printf("No route to destination address: %s\n", destination.String())
+		return
+
+	}
+
+	rrep := &messages.RREP{
+		HopCount:               destEntry.HopCount,
+		DestinationAddress:     destination,
+		DestinationSequenceNum: destEntry.SequenceNumber,
+		OriginatorAddress:      originator,
+	}
+	originatorEntry, exists := rt.GetEntry(originator)
+
+	if !exists {
+		log.Printf("No route to originator address: %s\n", originator.String())
+	}
+
+	a.sendToNextHop(rrep, originatorEntry.NextHop)
 }
