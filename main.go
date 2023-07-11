@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"go.bug.st/serial"
 	"io"
 	"log"
 	"lora-project/protocol/messages"
@@ -11,6 +10,8 @@ import (
 	"math/rand"
 	"os"
 	"time"
+
+	"go.bug.st/serial"
 )
 
 var commands = []string{
@@ -80,22 +81,28 @@ func main() {
 			write(port)
 		}*/
 
-	data := []byte{'0', '0', '2', '1', '1', '1', '1', '0', '0', '0', '0', '4', '7', '6', '1', '3', '3', '3', '3', '2', '2', '2', '2', '0'}
-	message, err := messages.Unmarshal(data)
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	fmt.Printf("%+v\n", message)
-	byteSlice, _ := message.Marshal()
-	fmt.Println(string(byteSlice))
+	var addr messages.Address
+	addr.UnmarshalText([]byte{'4', '7', '6', '1'})
 	mode := &serial.Mode{
 		BaudRate: 115200,
 	}
-	port, err := serial.Open("/home/Hannes/dev/ttyS21", mode)
+
+	port, err := serial.Open("/home/hannes/dev/ttyS20", mode)
+	defer port.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
 	handler := serial_handlers.NewATHandler(port)
-	handler.Run()
+	for {
+		select {
+		case err = <-handler.ErrorChan:
+			fmt.Println(err)
+
+		case <-time.After(time.Second * 10):
+			fmt.Println("bop.")
+		case msg := <-handler.MessageChan:
+			fmt.Printf("%+v\n", msg)
+		}
+	}
+
 }

@@ -53,7 +53,6 @@ func (r *RREQ) Unmarshal(data []byte) error {
 		return fmt.Errorf("invalid Destination Sequence Number")
 	}
 	r.DestinationSequenceNum = int16(u64)
-
 	err = r.OriginatorAddress.UnmarshalText(data[15:19])
 	if err != nil {
 		return fmt.Errorf("invalid Originator Address")
@@ -64,7 +63,7 @@ func (r *RREQ) Unmarshal(data []byte) error {
 		return fmt.Errorf("invalid Originator Sequence Number")
 	}
 	r.OriginatorSequenceNum = int16(u64)
-
+	fmt.Println(r.OriginatorSequenceNum)
 	return nil
 }
 
@@ -83,12 +82,12 @@ func (r *RREQ) Marshal() ([]byte, error) {
 		return nil, err
 	}
 	buf = append(buf, addressBytes...)
-	buf = append(buf, []byte(fmt.Sprintf("%04X", r.DestinationSequenceNum))...)
+	buf = append(buf, []byte(fmt.Sprintf("%04X", uint16(r.DestinationSequenceNum)))...)
 	addressBytes, err = r.OriginatorAddress.MarshalText()
 	if err != nil {
 		return nil, err
 	}
 	buf = append(buf, addressBytes...)
-	buf = append(buf, []byte(fmt.Sprintf("%04X", r.OriginatorSequenceNum))...)
+	buf = append(buf, []byte(fmt.Sprintf("%04X", uint16(r.OriginatorSequenceNum)))...)
 	return buf, nil
 }

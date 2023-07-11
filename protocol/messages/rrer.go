@@ -54,5 +54,6 @@ func (r *RRER) Marshal() ([]byte, error) {
 		return nil, err
 	}
 	buf = append(buf, addressBytes...)
+	buf = append(buf, []byte(fmt.Sprintf("%04X", uint16(r.UnreachDestinationSequence)))...)
 	return buf, nil
 }

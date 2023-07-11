@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 )
 
 type Command struct {
@@ -41,7 +40,7 @@ func NewATHandler(device io.ReadWriter) *ATHandler {
 		ErrorChan:        make(chan error),
 		Done:             make(chan bool),
 		responseReceived: make(chan struct{}),
-		MessageChan:      make(chan MessageEvent),
+		MessageChan:      make(chan MessageEvent, 10),
 	}
 	go handler.Run()
 	return handler
@@ -119,7 +118,6 @@ func (a *ATHandler) processCommands() {
 				a.ErrorChan <- err
 				continue
 			}
-			time.Sleep(time.Second)
 			<-a.responseReceived
 		case <-a.Done:
 			return
@@ -144,55 +142,109 @@ func (a *ATHandler) sendCommand() error {
 	return err
 }
 
-func (a *ATHandler) processResponses() {
+func (a *ATHandler) handleATMessage() {
 	scanner := bufio.NewScanner(a.device)
 	for scanner.Scan() {
 		response := strings.TrimSuffix(scanner.Text(), "\r\n")
-
+		fmt.Println(response)
 		if strings.HasPrefix(response, "AT+SENDED") {
 			a.handleCommandSent()
-		} else if strings.HasPrefix(response, "LR,") {
-			a.handleReceivedData(response)
 		} else {
 			a.handleCommandResponse(response)
 		}
 	}
 }
 
-func (a *ATHandler) handleReceivedData(response string) {
-	parts := strings.Split(response, ",")
-	if len(parts) != 4 {
-		a.ErrorChan <- errors.New("malformed received data")
-		return
+func (a *ATHandler) processResponses() {
+	reader := bufio.NewReader(a.device)
+	for {
+		bytes, err := reader.Peek(2)
+		if err != nil {
+			a.ErrorChan <- err
+			continue
+		}
+
+		prefix := string(bytes[:])
+		fmt.Println(prefix)
+		if prefix == "LR" {
+			a.handleLRMessage(reader)
+		} else if prefix == "AT" {
+			a.handleATMessage()
+		} else {
+			a.ErrorChan <- errors.New("unknown message prefix: " + prefix)
+			reader.Discard(2)
+		}
+	}
+}
+func (a *ATHandler) handleLRMessage(reader *bufio.Reader) {
+	var message []byte
+	for i := 0; i < 3; i++ {
+		part, err := reader.ReadBytes(',')
+		if err != nil {
+			a.ErrorChan <- err
+			return
+		}
+		message = append(message, part...)
 	}
 
-	srcAddress := messages.Address{}
-	err := srcAddress.UnmarshalText([]byte(parts[1]))
+	addressBytes := message[3:7]
+	fmt.Printf("%s\n", addressBytes)
+	var addr messages.Address
+	addr.UnmarshalText(addressBytes)
+
+	dataLenStr := string(message[len(message)-3 : len(message)-1])
+	dataLen, err := strconv.ParseInt(dataLenStr, 16, 8)
+
 	if err != nil {
 		a.ErrorChan <- err
 		return
 	}
 
-	dataLen, err := strconv.ParseInt(parts[2], 16, 32)
+	data := make([]byte, dataLen)
+	_, err = io.ReadFull(reader, data)
+
 	if err != nil {
 		a.ErrorChan <- err
 		return
 	}
 
-	data := parts[3]
-	if len(data) != int(dataLen) {
-		a.ErrorChan <- errors.New("received data length does not match expected length")
-		return
-	}
+	a.handleReceivedData(string(data), addr)
+}
+func (a *ATHandler) handleReceivedData(response string, sender messages.Address) {
+	// parts := strings.Split(response, ",")
+	// if len(parts) != 4 {
+	// 	a.ErrorChan <- errors.New("malformed received data")
+	// 	return
+	// }
 
-	msg, err := messages.Unmarshal([]byte(data))
+	// srcAddress := messages.Address{}
+	// err := srcAddress.UnmarshalText([]byte(parts[1]))
+	// if err != nil {
+	// 	a.ErrorChan <- err
+	// 	return
+	// }
+
+	// dataLen, err := strconv.ParseInt(parts[2], 16, 32)
+	// if err != nil {
+	// 	a.ErrorChan <- err
+	// 	return
+	// }
+
+	// data := parts[3]
+	// if len(data) != int(dataLen) {
+	// 	a.ErrorChan <- errors.New("received data length does not match expected length")
+	// 	return
+	// }
+
+	msg, err := messages.Unmarshal([]byte(response))
 	if err != nil {
 		a.ErrorChan <- err
 		return
 	}
+	fmt.Println(response)
 	event := MessageEvent{
 		Message:   msg,
-		Precursor: srcAddress,
+		Precursor: sender,
 	}
 	a.MessageChan <- event
 }
@@ -244,9 +296,10 @@ func (a *ATHandler) SendData(msg messages.Message) error {
 }
 
 func (a *ATHandler) handleCommandResponse(response string) {
-	a.commandMutex.Lock()
+	if strings.HasPrefix(response, "AT,SENDING") {
+		return
+	}
 	defer a.commandMutex.Unlock()
-
 	if len(a.commandsInFlight) == 0 {
 		a.ErrorChan <- errors.New("unexpected response: " + response)
 		return
@@ -254,4 +307,5 @@ func (a *ATHandler) handleCommandResponse(response string) {
 	cmd := a.commandsInFlight[0]
 	a.commandsInFlight = a.commandsInFlight[1:]
 	cmd.Callback(response, nil)
+	a.responseReceived <- struct{}{}
 }
