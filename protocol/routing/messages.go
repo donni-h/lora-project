@@ -1,7 +1,6 @@
 package routing
 
 import (
-	"fmt"
 	"log"
 	"lora-project/protocol/messages"
 	"lora-project/serial_handlers"
@@ -24,7 +23,7 @@ func (a *AODV) processMessage(event serial_handlers.MessageEvent) {
 		}
 	case messages.TypeData:
 		if data, ok := msg.(*messages.Data); ok {
-			a.handleData(data, pre)
+			a.handleData(data)
 		}
 
 	default:
@@ -34,6 +33,9 @@ func (a *AODV) processMessage(event serial_handlers.MessageEvent) {
 
 func (a *AODV) handleRREQ(rreq *messages.RREQ, precursor messages.Address) {
 	rt := a.routingTable
+	if a.idTable.hasID(rreq.OriginatorAddress, rreq.RREQID) || rreq.OriginatorAddress == a.currentAddress {
+		return
+	}
 
 	existingEntry, exists := rt.GetEntry(rreq.OriginatorAddress)
 
@@ -46,6 +48,7 @@ func (a *AODV) handleRREQ(rreq *messages.RREQ, precursor messages.Address) {
 			rreq.OriginatorSequenceNum,
 		)
 	}
+	a.idTable.AddID(rreq.OriginatorAddress, rreq.RREQID)
 
 	if rreq.DestinationAddress == a.currentAddress {
 		a.generateRREP(rreq.OriginatorAddress, rreq.DestinationAddress)
@@ -77,7 +80,7 @@ func (a *AODV) handleRREP(rrep *messages.RREP, precursor messages.Address) {
 		)
 	}
 
-	if rrep.OriginatorAddress == a.currentAddress {
+	if rrep.OriginatorAddress == a.currentAddress || rrep.OriginatorAddress == a.broadcastAddress {
 		return
 	}
 
@@ -107,9 +110,21 @@ func (a *AODV) handleRRER(rrer *messages.RRER) {
 	a.sendToNextHop(rrer, a.broadcastAddress)
 }
 
-func (a *AODV) handleData(data *messages.Data, precursor messages.Address) {
-	fmt.Println("Received Data:", data)
-	fmt.Println("Precursor:", precursor.String())
+func (a *AODV) handleData(data *messages.Data) {
+	if messages.CompareSeqnums(a.seqNum, data.DataSequenceNumber) {
+		a.seqNum = data.DataSequenceNumber
+	}
+	if data.DestinationAddress == a.currentAddress {
+		a.incomingDataQueue <- data
+		return
+	}
+
+	route, exists := a.routingTable.GetEntry(data.DestinationAddress)
+	if !exists {
+		a.generateRRER(data.DestinationAddress)
+		return
+	}
+	a.sendToNextHop(data, route.NextHop)
 }
 
 func (a *AODV) sendToNextHop(msg messages.Message, nextHop messages.Address) {
@@ -137,7 +152,78 @@ func (a *AODV) generateRREP(originator messages.Address, destination messages.Ad
 
 	if !exists {
 		log.Printf("No route to originator address: %s\n", originator.String())
+		a.generateRRER(originator)
 	}
 
 	a.sendToNextHop(rrep, originatorEntry.NextHop)
+}
+
+func (a *AODV) sendData(payload string, destination messages.Address) {
+	a.seqNum++
+	data := &messages.Data{
+		DestinationAddress: destination,
+		OriginatorAddress:  a.currentAddress,
+		DataSequenceNumber: a.seqNum,
+		Payload:            []byte(payload),
+	}
+
+	entry, exists := a.routingTable.GetEntry(destination)
+	if !exists {
+		_, exists = a.dataQueue.conds[destination]
+		a.dataQueue.Push(data)
+
+		if !exists {
+			a.generateRREQ(destination)
+			go a.dataQueue.Pop(destination)
+		}
+		return
+	}
+	a.sendToNextHop(data, entry.NextHop)
+}
+
+func (a *AODV) generateRREQ(address messages.Address) {
+	a.rreqID += 1
+	a.seqNum += 1
+
+	rreq := &messages.RREQ{
+		UFlag:                  true,
+		HopCount:               0,
+		RREQID:                 a.rreqID,
+		DestinationAddress:     address,
+		DestinationSequenceNum: 0,
+		OriginatorAddress:      a.currentAddress,
+		OriginatorSequenceNum:  a.seqNum,
+	}
+
+	a.sendToNextHop(rreq, a.broadcastAddress)
+}
+
+func (a *AODV) queueData(destination messages.Address) {
+	go func() {
+		pendingData := a.dataQueue.Pop(destination)
+
+		for _, msg := range pendingData {
+			entry, ok := a.routingTable.GetEntry(destination)
+
+			if !ok {
+				log.Println("Couldn't send message, no route to:" + destination.String())
+				return
+			}
+
+			a.sendToNextHop(msg, entry.NextHop)
+		}
+	}()
+}
+
+func (a *AODV) generateRRER(address messages.Address) {
+	entry, exists := a.routingTable.GetEntry(address)
+
+	if !exists {
+		return
+	}
+	rrer := &messages.RRER{
+		UnreachDestinationAddress:  address,
+		UnreachDestinationSequence: entry.SequenceNumber,
+	}
+	a.handler.SendMessage(rrer)
 }

@@ -7,14 +7,15 @@ import (
 )
 
 type AODV struct {
-	handler          *serial_handlers.ATHandler
-	routingTable     Table
-	idTable          RREQIDTable
-	rreqID           uint16
-	seqNum           int16
-	currentAddress   messages.Address
-	messageQueue     chan messages.Message
-	broadcastAddress messages.Address
+	handler           *serial_handlers.ATHandler
+	routingTable      *Table
+	idTable           *RREQIDTable
+	rreqID            uint16
+	seqNum            int16
+	currentAddress    messages.Address
+	incomingDataQueue chan messages.Message
+	broadcastAddress  messages.Address
+	dataQueue         *DataQueue
 }
 
 func NewAODV(atHandler *serial_handlers.ATHandler) *AODV {
@@ -29,14 +30,15 @@ func NewAODV(atHandler *serial_handlers.ATHandler) *AODV {
 
 	}
 	return &AODV{
-		handler:          atHandler,
-		routingTable:     NewTable(),
-		idTable:          NewRREQIDTable(),
-		rreqID:           0,
-		seqNum:           0,
-		currentAddress:   addr,
-		messageQueue:     make(chan messages.Message, 10),
-		broadcastAddress: broadcast,
+		handler:           atHandler,
+		routingTable:      NewTable(),
+		idTable:           NewRREQIDTable(),
+		rreqID:            0,
+		seqNum:            0,
+		currentAddress:    addr,
+		incomingDataQueue: make(chan messages.Message, 10),
+		broadcastAddress:  broadcast,
+		dataQueue:         NewDataQueue(),
 	}
 }
 func (a *AODV) Run() {
