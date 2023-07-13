@@ -13,7 +13,7 @@ type AODV struct {
 	rreqID            uint16
 	seqNum            int16
 	currentAddress    messages.Address
-	incomingDataQueue chan messages.Message
+	IncomingDataQueue chan messages.Data
 	broadcastAddress  messages.Address
 	dataQueue         *DataQueue
 }
@@ -36,7 +36,7 @@ func NewAODV(atHandler *serial_handlers.ATHandler) *AODV {
 		rreqID:            0,
 		seqNum:            0,
 		currentAddress:    addr,
-		incomingDataQueue: make(chan messages.Message, 10),
+		IncomingDataQueue: make(chan messages.Data, 10),
 		broadcastAddress:  broadcast,
 		dataQueue:         NewDataQueue(),
 	}
@@ -44,6 +44,7 @@ func NewAODV(atHandler *serial_handlers.ATHandler) *AODV {
 func (a *AODV) Run() {
 	go a.processIncomingMessages()
 	go a.helloRoutine()
+	a.StartExpirationWorker()
 }
 
 func (a *AODV) processIncomingMessages() {

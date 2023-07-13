@@ -3,45 +3,13 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"io"
+	"go.bug.st/serial"
 	"log"
 	"lora-project/protocol/messages"
+	"lora-project/protocol/routing"
 	"lora-project/serial_handlers"
-	"math/rand"
 	"os"
-	"time"
-
-	"go.bug.st/serial"
 )
-
-var commands = []string{
-	"AT",
-	"AT+SEND=3",
-	"AT+SEND=A",
-	"jasdjkjasjdjkasd",
-}
-
-func write(port serial.Port) {
-	rnd := rand.Intn(len(commands))
-	lineSep := "\r\n"
-	msg := []byte(fmt.Sprintf("%s%s", commands[rnd], lineSep))
-	n, err := port.Write(msg)
-	if err != nil {
-		fmt.Println("Error writing to serial port: ", err)
-		return
-	}
-	fmt.Printf("Sent %v bytes: '%q'\n", n, msg)
-	if rnd == 1 {
-		reader := bufio.NewReader(os.Stdin)
-		fmt.Print("enter text: ")
-		buf := make([]byte, 3)
-		_, _ = io.ReadFull(reader, buf)
-		fmt.Printf("AT,SENDING%q\n", lineSep)
-		_, _ = port.Write(buf)
-		fmt.Printf("AT,SENDED%q\n", lineSep)
-	}
-	time.Sleep(time.Second)
-}
 
 func main() {
 	/*	rand.Seed(time.Now().UnixNano())
@@ -81,28 +49,57 @@ func main() {
 			write(port)
 		}*/
 
-	var addr messages.Address
-	addr.UnmarshalText([]byte{'4', '7', '6', '1'})
 	mode := &serial.Mode{
 		BaudRate: 115200,
 	}
 
 	port, err := serial.Open("/home/hannes/dev/ttyS20", mode)
-	defer port.Close()
+	defer func(port serial.Port) {
+		err := port.Close()
+		if err != nil {
+
+		}
+	}(port)
 	if err != nil {
 		log.Fatal(err)
 	}
 	handler := serial_handlers.NewATHandler(port)
-	for {
-		select {
-		case err = <-handler.ErrorChan:
-			fmt.Println(err)
+	aodv := routing.NewAODV(handler)
+	aodv.Run()
 
-		case <-time.After(time.Second * 10):
-			fmt.Println("bop.")
-		case msg := <-handler.MessageChan:
-			fmt.Printf("%+v\n", msg)
+	go func() {
+		for data := range aodv.IncomingDataQueue {
+			fmt.Printf("Received message: %s from %s\n", string(data.Payload), data.OriginatorAddress.String())
 		}
-	}
+	}()
 
+	scanner := bufio.NewScanner(os.Stdin)
+	for {
+		fmt.Print("Enter destination address: ")
+		scanned := scanner.Scan()
+		if !scanned {
+			fmt.Println("Failed to scan address!")
+			return
+		}
+
+		destination := scanner.Text()
+		var address messages.Address
+		if address.UnmarshalText([]byte(destination)) != nil {
+			fmt.Println("Invalid address..")
+			continue
+		}
+
+		fmt.Print("Enter message: ")
+		scanned = scanner.Scan()
+
+		if !scanned {
+			fmt.Println("Failed to scan message!")
+			return
+		}
+
+		message := scanner.Text()
+
+		aodv.SendData(message, address)
+
+	}
 }

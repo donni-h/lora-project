@@ -5,7 +5,7 @@ import (
 	"lora-project/protocol/messages"
 )
 
-func (a *AODV) sendData(payload string, destination messages.Address) {
+func (a *AODV) SendData(payload string, destination messages.Address) {
 	a.seqNum++
 	data := &messages.Data{
 		DestinationAddress: destination,
@@ -50,7 +50,7 @@ func (a *AODV) handleData(data *messages.Data) {
 		a.seqNum = data.DataSequenceNumber
 	}
 	if data.DestinationAddress == a.currentAddress {
-		a.incomingDataQueue <- data
+		a.IncomingDataQueue <- *data
 		return
 	}
 
