@@ -64,7 +64,7 @@ func (r RREP) Marshal() ([]byte, error) {
 		return nil, err
 	}
 	buf = append(buf, addressBytes...)
-	buf = append(buf, []byte(fmt.Sprintf("%04X", r.DestinationSequenceNum))...)
+	buf = append(buf, []byte(fmt.Sprintf("%04X", uint16(r.DestinationSequenceNum)))...)
 	addressBytes, err = r.OriginatorAddress.MarshalText()
 	if err != nil {
 		return nil, err
