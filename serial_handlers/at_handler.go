@@ -176,6 +176,7 @@ func (a *ATHandler) processResponses() {
 		}
 	}
 }
+
 func (a *ATHandler) handleLRMessage(reader *bufio.Reader) {
 	var message []byte
 	for i := 0; i < 3; i++ {

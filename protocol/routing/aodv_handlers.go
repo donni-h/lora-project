@@ -19,7 +19,7 @@ func (a *AODV) processMessage(event serial_handlers.MessageEvent) {
 		}
 	case messages.TypeRRER:
 		if rrer, ok := msg.(*messages.RRER); ok {
-			a.handleRRER(rrer)
+			a.handleRRER(rrer, pre)
 		}
 	case messages.TypeData:
 		if data, ok := msg.(*messages.Data); ok {
