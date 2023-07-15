@@ -7,8 +7,7 @@ func (a *AODV) handleRRER(rrer *messages.RRER, precursor messages.Address) {
 	existingEntry, exists := rt.GetEntry(rrer.UnreachDestinationAddress)
 
 	// Discard message if it is not present in the current routing table
-	if !exists || !messages.CompareSeqnums(existingEntry.SequenceNumber, rrer.UnreachDestinationSequence) ||
-		existingEntry.NextHop != precursor {
+	if !exists || existingEntry.NextHop != precursor {
 		return
 	}
 
@@ -18,14 +17,8 @@ func (a *AODV) handleRRER(rrer *messages.RRER, precursor messages.Address) {
 }
 
 func (a *AODV) generateRRER(address messages.Address) {
-	entry, exists := a.routingTable.GetEntry(address)
-
-	if !exists {
-		return
-	}
 	rrer := &messages.RRER{
-		UnreachDestinationAddress:  address,
-		UnreachDestinationSequence: entry.SequenceNumber,
+		UnreachDestinationAddress: address,
 	}
 	a.handler.SendMessage(rrer)
 }

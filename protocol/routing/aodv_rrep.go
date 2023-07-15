@@ -3,18 +3,30 @@ package routing
 import (
 	"log"
 	"lora-project/protocol/messages"
+	"time"
 )
 
 func (a *AODV) generateRREP(originator messages.Address, destination messages.Address) {
 	rt := a.routingTable
 	destEntry, exists := rt.GetEntry(destination)
+	a.seqNum++
 
-	if !exists {
+	if !exists && destination != a.currentAddress {
 		log.Printf("No route to destination address: %s\n", destination.String())
 		return
 
 	}
 
+	if destination == a.currentAddress {
+		destEntry = &RouteEntry{
+			DestinationAddress: a.currentAddress,
+			NextHop:            a.broadcastAddress,
+			HopCount:           0,
+			Precursors:         nil,
+			SequenceNumber:     a.seqNum,
+			Arrival:            time.Now(),
+		}
+	}
 	rrep := &messages.RREP{
 		HopCount:               destEntry.HopCount,
 		DestinationAddress:     destination,
@@ -23,12 +35,18 @@ func (a *AODV) generateRREP(originator messages.Address, destination messages.Ad
 	}
 	originatorEntry, exists := rt.GetEntry(originator)
 
-	if !exists {
+	if !exists && originator != a.broadcastAddress {
 		log.Printf("No route to originator address: %s\n", originator.String())
 		a.generateRRER(originator)
+		return
 	}
-
-	a.sendToNextHop(rrep, originatorEntry.NextHop)
+	var nextHop messages.Address
+	if a.broadcastAddress == originator {
+		nextHop = originator
+	} else {
+		nextHop = originatorEntry.NextHop
+	}
+	a.sendToNextHop(rrep, nextHop)
 }
 
 func (a *AODV) handleRREP(rrep *messages.RREP, precursor messages.Address) {
@@ -44,10 +62,18 @@ func (a *AODV) handleRREP(rrep *messages.RREP, precursor messages.Address) {
 			[]messages.Address{},
 			rrep.DestinationSequenceNum,
 		)
+
+		a.seqNum = rrep.DestinationSequenceNum
 	}
 
-	if rrep.OriginatorAddress == a.currentAddress || rrep.OriginatorAddress == a.broadcastAddress {
+	if rrep.OriginatorAddress == a.currentAddress {
+		a.dataQueue.Signal(rrep.DestinationAddress)
 		return
+	}
+
+	if rrep.OriginatorAddress == a.broadcastAddress {
+		return
+
 	}
 
 	originatorEntry, exists := rt.GetEntry(rrep.OriginatorAddress)

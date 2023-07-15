@@ -10,7 +10,7 @@ func (a *AODV) handleRREQ(rreq *messages.RREQ, precursor messages.Address) {
 
 	existingEntry, exists := rt.GetEntry(rreq.OriginatorAddress)
 
-	if !exists || messages.CompareSeqnums(existingEntry.SequenceNumber, rreq.OriginatorSequenceNum) {
+	if !exists {
 		rt.AddOrUpdateEntry(
 			rreq.OriginatorAddress,
 			precursor,
@@ -18,7 +18,20 @@ func (a *AODV) handleRREQ(rreq *messages.RREQ, precursor messages.Address) {
 			[]messages.Address{},
 			rreq.OriginatorSequenceNum,
 		)
+
+		a.seqNum = rreq.OriginatorSequenceNum
+	} else if messages.CompareSeqnums(existingEntry.SequenceNumber, rreq.OriginatorSequenceNum) {
+		rt.AddOrUpdateEntry(
+			rreq.OriginatorAddress,
+			precursor,
+			rreq.HopCount+1,
+			[]messages.Address{},
+			rreq.OriginatorSequenceNum,
+		)
+
+		a.seqNum = rreq.OriginatorSequenceNum
 	}
+
 	a.idTable.AddID(rreq.OriginatorAddress, rreq.RREQID)
 
 	if rreq.DestinationAddress == a.currentAddress {
@@ -30,6 +43,7 @@ func (a *AODV) handleRREQ(rreq *messages.RREQ, precursor messages.Address) {
 
 	if exists {
 		a.generateRREP(rreq.OriginatorAddress, rreq.DestinationAddress)
+		return
 	}
 
 	rreq.HopCount += 1

@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"fmt"
 	"log"
 	"lora-project/protocol/messages"
 )
@@ -10,7 +11,6 @@ func (a *AODV) SendData(payload string, destination messages.Address) {
 	data := &messages.Data{
 		DestinationAddress: destination,
 		OriginatorAddress:  a.currentAddress,
-		DataSequenceNumber: a.seqNum,
 		Payload:            []byte(payload),
 	}
 
@@ -21,7 +21,7 @@ func (a *AODV) SendData(payload string, destination messages.Address) {
 
 		if !exists {
 			a.generateRREQ(destination)
-			go a.dataQueue.Pop(destination)
+			a.queueData(destination)
 		}
 		return
 	}
@@ -32,6 +32,7 @@ func (a *AODV) queueData(destination messages.Address) {
 	go func() {
 		pendingData := a.dataQueue.Pop(destination)
 
+		fmt.Printf("das sind die queued messages: %+v\n", pendingData)
 		for _, msg := range pendingData {
 			entry, ok := a.routingTable.GetEntry(destination)
 
@@ -46,9 +47,7 @@ func (a *AODV) queueData(destination messages.Address) {
 }
 
 func (a *AODV) handleData(data *messages.Data) {
-	if messages.CompareSeqnums(a.seqNum, data.DataSequenceNumber) {
-		a.seqNum = data.DataSequenceNumber
-	}
+
 	if data.DestinationAddress == a.currentAddress {
 		a.IncomingDataQueue <- *data
 		return

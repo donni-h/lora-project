@@ -2,13 +2,11 @@ package messages
 
 import (
 	"fmt"
-	"strconv"
 )
 
 type Data struct {
 	DestinationAddress Address
 	OriginatorAddress  Address
-	DataSequenceNumber int16
 	Payload            []byte
 }
 
@@ -17,11 +15,11 @@ func (r *Data) Type() MessageType {
 }
 
 func (r *Data) HeaderSize() int {
-	return 6
+	return 8
 }
 
 func (r *Data) Unmarshal(data []byte) error {
-	if len(data) < 12 {
+	if len(data) < 8 {
 		// Handle error: insufficient data
 		return fmt.Errorf("cannot Unmarshal data: expected at least %d bytes but got %d", 10, len(data))
 	}
@@ -35,13 +33,8 @@ func (r *Data) Unmarshal(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("invalid Originator Address")
 	}
-	u64, err := strconv.ParseUint(string(data[8:12]), 16, 16)
-	if err != nil {
-		return fmt.Errorf("invalid Unreach Dest Sequence Number")
-	}
-	r.DataSequenceNumber = int16(u64)
 
-	r.Payload = data[12:]
+	r.Payload = data[8:]
 	return nil
 }
 
@@ -58,7 +51,6 @@ func (r *Data) Marshal() ([]byte, error) {
 		return nil, err
 	}
 	buf = append(buf, addressBytes...)
-	buf = append(buf, []byte(fmt.Sprintf("%04X", uint16(r.DataSequenceNumber)))...)
 	buf = append(buf, r.Payload...)
 
 	return buf, nil

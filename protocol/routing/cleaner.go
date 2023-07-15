@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"fmt"
 	"lora-project/protocol/messages"
 	"time"
 )
@@ -23,10 +24,11 @@ func (a *AODV) StartExpirationWorker() {
 				}
 			}
 			a.routingTable.RUnlock()
-
 			// perform deletion
 			for _, address := range toDelete {
+				fmt.Println("Deleting address:" + address.String())
 				a.routingTable.DeleteEntry(address)
+				a.generateRRER(address)
 			}
 		}
 	}()

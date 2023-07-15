@@ -1,12 +1,11 @@
 package routing
 
 import (
-	"lora-project/protocol/messages"
 	"time"
 )
 
 const (
-	HelloInterval = time.Minute
+	HelloInterval = time.Second * 10
 )
 
 func (a *AODV) helloRoutine() {
@@ -22,12 +21,6 @@ func (a *AODV) helloRoutine() {
 }
 
 func (a *AODV) sendHello() {
-	rrep := &messages.RREP{
-		HopCount:               0,
-		DestinationAddress:     a.currentAddress,
-		DestinationSequenceNum: a.seqNum,
-		OriginatorAddress:      a.currentAddress,
-	}
 
-	a.handler.SendMessage(rrep)
+	a.generateRREP(a.broadcastAddress, a.currentAddress)
 }

@@ -50,7 +50,6 @@ func (q *DataQueue) Pop(destination messages.Address) []*messages.Data {
 
 	delete(q.messages, destination)
 	delete(q.conds, destination)
-
 	return msgQueue
 
 }

@@ -42,8 +42,13 @@ func NewAODV(atHandler *serial_handlers.ATHandler) *AODV {
 	}
 }
 func (a *AODV) Run() {
+	str := []string{"433920000", "5", "9", "7", "4", "1", "0", "0", "0", "0", "3000", "8", "8"}
 	go a.processIncomingMessages()
-	go a.helloRoutine()
+	a.handler.SetOwnAddress(a.currentAddress)
+	a.handler.SetTargetAddress(a.broadcastAddress)
+	a.handler.Configure(str)
+	a.handler.SetReceive()
+	// go a.helloRoutine()
 	a.StartExpirationWorker()
 }
 
