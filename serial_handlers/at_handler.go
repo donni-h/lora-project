@@ -8,7 +8,6 @@ import (
 	"lora-project/protocol/messages"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 type Command struct {
@@ -28,8 +27,7 @@ type ATHandler struct {
 	ErrorChan        chan error
 	Done             chan bool
 	responseReceived chan struct{}
-	commandMutex     sync.Mutex
-	commandsInFlight []Command
+	currentCommand   *Command
 	MessageChan      chan MessageEvent
 }
 
@@ -137,8 +135,7 @@ func (a *ATHandler) processCommands() {
 	for {
 		select {
 		case cmd := <-a.CommandQueue:
-			a.commandMutex.Lock()
-			a.commandsInFlight = append(a.commandsInFlight, cmd)
+			a.currentCommand = &cmd
 			err := a.sendCommand()
 			if err != nil {
 				a.ErrorChan <- err
@@ -152,10 +149,8 @@ func (a *ATHandler) processCommands() {
 }
 
 func (a *ATHandler) sendCommand() error {
-	if len(a.commandsInFlight) == 0 {
-		return nil
-	}
-	cmd := a.commandsInFlight[0]
+
+	cmd := a.currentCommand
 	cmdString := cmd.Cmd
 	if len(cmd.Args) > 0 {
 		if cmd.Cmd == "AT+CFG" {
@@ -169,40 +164,69 @@ func (a *ATHandler) sendCommand() error {
 }
 
 func (a *ATHandler) processResponses() {
-	scanner := bufio.NewScanner(a.device)
-	for scanner.Scan() {
-		response := scanner.Text()
-		fmt.Println(response)
-		if strings.HasPrefix(response, "AT,SENDED") {
-			a.handleCommandSent()
-		} else if strings.HasPrefix(response, "LR,") {
-			a.handleReceivedData(response)
+	reader := bufio.NewReader(a.device)
+	for {
+		responseType, err := reader.ReadString(',')
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			a.ErrorChan <- err
+			return
+		}
+		responseType = strings.TrimSpace(responseType)
+		if strings.HasPrefix(responseType, "LR,") {
+			a.handleReceivedData(reader)
+			continue
+		}
+		response, err := reader.ReadString('\n')
+		response = fmt.Sprintf("%s%s", responseType, strings.TrimSpace(response))
+		if a.currentCommand.Cmd == "AT+SEND" {
+			a.handleCommandSent(response)
 		} else {
 			a.handleCommandResponse(response)
 		}
 	}
 }
 
-func (a *ATHandler) handleReceivedData(response string) {
-	parts := strings.Split(response, ",")
-	if len(parts) != 4 {
-		a.ErrorChan <- errors.New("malformed received data")
-		return
-	}
+func (a *ATHandler) handleReceivedData(reader *bufio.Reader) {
 
-	srcAddress := messages.Address{}
-	err := srcAddress.UnmarshalText([]byte(parts[1]))
+	srcBytes, err := reader.ReadBytes(',')
 	if err != nil {
 		a.ErrorChan <- err
 		return
 	}
-	if srcAddress.String() == "4290" {
+	srcBytes = srcBytes[:len(srcBytes)-1]
+	srcAddress := messages.Address{}
+
+	err = srcAddress.UnmarshalText(srcBytes)
+	if err != nil {
+		a.ErrorChan <- err
 		return
 	}
 
-	data := parts[3]
+	lengthStr, err := reader.ReadString(',')
+	if err != nil {
+		a.ErrorChan <- err
+		return
+	}
+	lengthStr = strings.TrimSpace(lengthStr)
 
-	msg, err := messages.Unmarshal([]byte(data))
+	length, err := strconv.ParseInt(lengthStr, 16, 64) // convert from hex string to int
+	if err != nil {
+		a.ErrorChan <- err
+		return
+	}
+
+	payload := make([]byte, length)
+
+	_, err = io.ReadFull(reader, payload)
+	if err != nil {
+		a.ErrorChan <- err
+		return
+	}
+
+	msg, err := messages.Unmarshal(payload)
 	if err != nil {
 		a.ErrorChan <- err
 		return
@@ -214,10 +238,17 @@ func (a *ATHandler) handleReceivedData(response string) {
 	a.MessageChan <- event
 }
 
-func (a *ATHandler) handleCommandSent() {
-	defer a.commandMutex.Unlock()
-
-	fmt.Println("sent done.")
+func (a *ATHandler) handleCommandSent(response string) {
+	if response == "AT,OK" {
+		a.currentCommand.Callback(response, nil)
+	} else if response == "AT,SENDING" {
+	} else if response == "AT,SENDED" {
+		a.currentCommand = nil
+		fmt.Println("sent done.")
+		a.responseReceived <- struct{}{}
+	} else {
+		a.ErrorChan <- errors.New("unexpected response received")
+	}
 }
 
 func (a *ATHandler) SendData(msg messages.Message) error {
@@ -254,17 +285,12 @@ func (a *ATHandler) SendData(msg messages.Message) error {
 }
 
 func (a *ATHandler) handleCommandResponse(response string) {
-	if strings.HasPrefix(response, "AT,SENDING") {
-		a.commandMutex.Lock()
-		return
-	}
-	defer a.commandMutex.Unlock()
-	if len(a.commandsInFlight) == 0 {
+	if a.currentCommand == nil {
 		a.ErrorChan <- errors.New("unexpected response: " + response)
 		return
 	}
-	cmd := a.commandsInFlight[0]
-	a.commandsInFlight = a.commandsInFlight[1:]
+	cmd := a.currentCommand
+	a.currentCommand = nil
 	cmd.Callback(response, nil)
 	a.responseReceived <- struct{}{}
 }

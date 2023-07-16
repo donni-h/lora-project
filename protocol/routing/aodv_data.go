@@ -16,12 +16,12 @@ func (a *AODV) SendData(payload string, destination messages.Address) {
 
 	entry, exists := a.routingTable.GetEntry(destination)
 	if !exists {
-		_, exists = a.dataQueue.conds[destination]
+		_, exists = a.dataQueue.signals[destination]
 		a.dataQueue.Push(data)
 
 		if !exists {
 			a.generateRREQ(destination)
-			a.queueData(destination)
+			go a.queueData(destination)
 		}
 		return
 	}
@@ -29,8 +29,22 @@ func (a *AODV) SendData(payload string, destination messages.Address) {
 }
 
 func (a *AODV) queueData(destination messages.Address) {
-	go func() {
-		pendingData := a.dataQueue.Pop(destination)
+	timeOutCount := 0
+
+	for {
+		pendingData, err := a.dataQueue.Pop(destination)
+		if err == ErrTimeOut {
+			timeOutCount++
+			if timeOutCount == 3 {
+				a.dataQueue.mux.Lock()
+				delete(a.dataQueue.messages, destination)
+				delete(a.dataQueue.signals, destination)
+				a.dataQueue.mux.Unlock()
+				return
+			}
+			a.generateRREQ(destination)
+			continue
+		}
 
 		fmt.Printf("das sind die queued messages: %+v\n", pendingData)
 		for _, msg := range pendingData {
@@ -43,7 +57,7 @@ func (a *AODV) queueData(destination messages.Address) {
 
 			a.sendToNextHop(msg, entry.NextHop)
 		}
-	}()
+	}
 }
 
 func (a *AODV) handleData(data *messages.Data) {
