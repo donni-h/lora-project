@@ -18,7 +18,6 @@ func (a *AODV) handleRREQ(rreq *messages.RREQ, precursor messages.Address) {
 			[]messages.Address{},
 			rreq.OriginatorSequenceNum,
 		)
-
 		a.seqNum = rreq.OriginatorSequenceNum
 	} else if messages.CompareSeqnums(existingEntry.SequenceNumber, rreq.OriginatorSequenceNum) {
 		rt.AddOrUpdateEntry(
@@ -28,7 +27,8 @@ func (a *AODV) handleRREQ(rreq *messages.RREQ, precursor messages.Address) {
 			[]messages.Address{},
 			rreq.OriginatorSequenceNum,
 		)
-
+	}
+	if messages.CompareSeqnums(a.seqNum, rreq.OriginatorSequenceNum) {
 		a.seqNum = rreq.OriginatorSequenceNum
 	}
 

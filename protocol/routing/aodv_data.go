@@ -57,6 +57,7 @@ func (a *AODV) queueData(destination messages.Address) {
 
 			a.sendToNextHop(msg, entry.NextHop)
 		}
+		return
 	}
 }
 
