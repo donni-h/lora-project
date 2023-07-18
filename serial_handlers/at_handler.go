@@ -51,6 +51,7 @@ func (a *ATHandler) AddCommand(cmd Command) {
 // SendMessage sends a messages.Message via the ATHandler.
 func (a *ATHandler) SendMessage(msg messages.Message) {
 	data, err := msg.Marshal()
+	fmt.Println(string(data))
 	if err != nil {
 		a.ErrorChan <- err
 		return
@@ -180,6 +181,7 @@ func (a *ATHandler) processResponses() {
 			continue
 		}
 		response, err := reader.ReadString('\n')
+		fmt.Println(response)
 		response = fmt.Sprintf("%s%s", responseType, strings.TrimSpace(response))
 		if a.currentCommand.Cmd == "AT+SEND" {
 			a.handleCommandSent(response)
@@ -204,14 +206,13 @@ func (a *ATHandler) handleReceivedData(reader *bufio.Reader) {
 		a.ErrorChan <- err
 		return
 	}
-
 	lengthStr, err := reader.ReadString(',')
 	if err != nil {
 		a.ErrorChan <- err
 		return
 	}
 	lengthStr = strings.TrimSpace(lengthStr)
-
+	lengthStr = strings.TrimSuffix(lengthStr, ",")
 	length, err := strconv.ParseInt(lengthStr, 16, 64) // convert from hex string to int
 	if err != nil {
 		a.ErrorChan <- err
@@ -225,7 +226,7 @@ func (a *ATHandler) handleReceivedData(reader *bufio.Reader) {
 		a.ErrorChan <- err
 		return
 	}
-
+	fmt.Println(string(payload), srcAddress.String())
 	msg, err := messages.Unmarshal(payload)
 	if err != nil {
 		a.ErrorChan <- err
@@ -235,6 +236,10 @@ func (a *ATHandler) handleReceivedData(reader *bufio.Reader) {
 		Message:   msg,
 		Precursor: srcAddress,
 	}
+	if srcAddress.String() != "7890" {
+		return
+	}
+
 	a.MessageChan <- event
 }
 
@@ -244,7 +249,6 @@ func (a *ATHandler) handleCommandSent(response string) {
 	} else if response == "AT,SENDING" {
 	} else if response == "AT,SENDED" {
 		a.currentCommand = nil
-		fmt.Println("sent done.")
 		a.responseReceived <- struct{}{}
 	} else {
 		a.ErrorChan <- errors.New("unexpected response received")

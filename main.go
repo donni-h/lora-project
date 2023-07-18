@@ -53,7 +53,7 @@ func main() {
 		BaudRate: 115200,
 	}
 
-	port, err := serial.Open("/dev/ttyUSB1", mode)
+	port, err := serial.Open("/dev/ttyUSB0", mode)
 	defer func(port serial.Port) {
 		err := port.Close()
 		if err != nil {

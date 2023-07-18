@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"fmt"
 	"log"
 	"lora-project/protocol/messages"
 	"time"
@@ -10,7 +11,7 @@ func (a *AODV) generateRREP(originator messages.Address, destination messages.Ad
 	rt := a.routingTable
 	destEntry, exists := rt.GetEntry(destination)
 	a.seqNum++
-
+	fmt.Println("generating route reply...")
 	if !exists && destination != a.currentAddress {
 		log.Printf("No route to destination address: %s\n", destination.String())
 		return

@@ -48,7 +48,7 @@ func (a *AODV) Run() {
 	a.handler.SetTargetAddress(a.broadcastAddress)
 	a.handler.Configure(str)
 	a.handler.SetReceive()
-	// go a.helloRoutine()
+	go a.helloRoutine()
 	a.StartExpirationWorker()
 }
 

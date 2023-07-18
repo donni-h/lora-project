@@ -1,6 +1,9 @@
 package routing
 
-import "lora-project/protocol/messages"
+import (
+	"fmt"
+	"lora-project/protocol/messages"
+)
 
 func (a *AODV) handleRREQ(rreq *messages.RREQ, precursor messages.Address) {
 	rt := a.routingTable
@@ -9,7 +12,6 @@ func (a *AODV) handleRREQ(rreq *messages.RREQ, precursor messages.Address) {
 	}
 
 	existingEntry, exists := rt.GetEntry(rreq.OriginatorAddress)
-
 	if !exists {
 		rt.AddOrUpdateEntry(
 			rreq.OriginatorAddress,
@@ -40,7 +42,7 @@ func (a *AODV) handleRREQ(rreq *messages.RREQ, precursor messages.Address) {
 	}
 
 	_, exists = rt.GetEntry(rreq.DestinationAddress)
-
+	fmt.Println(exists)
 	if exists {
 		a.generateRREP(rreq.OriginatorAddress, rreq.DestinationAddress)
 		return
